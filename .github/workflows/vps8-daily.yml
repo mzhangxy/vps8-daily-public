@@ -1,0 +1,178 @@
+name: VPS8 Daily Auto
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: '10 10 * * *'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+
+      # =========================
+      # 📥 主仓库
+      # =========================
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      # =========================
+      # 🔐 拉取私库
+      # =========================
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/vps8-daily
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: scripts
+
+      # =========================
+      # ⏳ 随机延迟
+      # =========================
+      - name: Random delay
+        run: |
+          delay=$((RANDOM % 120))
+          echo "⏳ 随机延迟: ${delay}s"
+          sleep $delay
+
+      # =========================
+      # 🐍 Python
+      # =========================
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # =========================
+      # 📦 系统依赖
+      # =========================
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            xvfb \
+            curl \
+            wget \
+            unzip \
+            p7zip-full \
+            fonts-liberation \
+            libnss3 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libxss1 \
+            libasound2t64 \
+            libgbm1 \
+            libu2f-udev \
+            xdg-utils
+
+      # =========================
+      # 🌐 安装 Chrome
+      # =========================
+      - name: Install Google Chrome
+        run: |
+          wget -q \
+            https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+
+          sudo apt-get install -y \
+            ./google-chrome-stable_current_amd64.deb
+
+          google-chrome --version
+
+      # =========================
+      # 🐍 安装 Python 依赖
+      # =========================
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip setuptools wheel
+
+          pip install \
+            playwright \
+            requests \
+            pysocks \
+            pyyaml \
+            aiofiles \
+            python-dotenv
+
+          playwright install chromium
+
+      # =========================
+      # 📦 下载 NopeCHA 插件
+      # =========================
+      - name: Download NopeCHA extension
+        run: |
+          mkdir -p scripts/extensions/nopecha
+
+          wget -O scripts/extensions/nopecha/chromium.zip \
+            https://github.com/NopeCHALLC/nopecha-extension/releases/latest/download/chromium.zip
+
+      # =========================
+      # 📦 解压 NopeCHA
+      # =========================
+      - name: Unpack NopeCHA extension
+        run: |
+          mkdir -p scripts/extensions/nopecha/unpacked
+
+          7z x -y \
+            scripts/extensions/nopecha/chromium.zip \
+            -oscripts/extensions/nopecha/unpacked
+
+          echo "📌 manifest.json:"
+          cat scripts/extensions/nopecha/unpacked/manifest.json
+
+      # =========================
+      # 🚀 安装 Hysteria2
+      # =========================
+      - name: Install Hysteria2
+        run: |
+          curl -L \
+            -o hysteria \
+            https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64
+
+          chmod +x hysteria
+
+          sudo mv hysteria /usr/local/bin/
+
+          hysteria version
+
+      # =========================
+      # 📂 创建目录
+      # =========================
+      - name: Prepare dirs
+        run: |
+          mkdir -p screenshots
+          touch screenshots/.keep
+
+      # =========================
+      # ▶️ 执行脚本
+      # =========================
+      - name: Run Script
+        env:
+          VPS8_BATCH: ${{ secrets.VPS8_BATCH }}
+
+          VPS8_HY2_URL: ${{ secrets.VPS8_HY2_URL }}
+
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+
+        run: |
+          echo "🚀 Start VPS8 Auto"
+
+          xvfb-run -a \
+            --server-args="-screen 0 1920x1080x24" \
+            python3 scripts/main.py
+
+      # =========================
+      # 📤 上传截图
+      # =========================
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 3
