@@ -30,7 +30,7 @@ EXT_PATH = os.path.abspath(
 SCREEN_DIR = "screenshots"
 
 # 12分钟
-HCAPTCHA_TIMEOUT = 720
+HCAPTCHA_TIMEOUT = 360
 
 
 # ================= 工具 =================
